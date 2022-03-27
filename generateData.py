@@ -18,7 +18,7 @@ def generate( n:int=1000, nPeaks:int = 10, noise:float = 1, peakwidthsVariabilit
     for center, width, height in zip(peakCenters, peakwidths, peakHeights):
         peak = makePeak(width=width, height=height)
         for index1, index2 in enumerate(range(center-width, center+width+1)):
-            data[index2] += peak[index1]
+            data[index2] -= peak[index1]
             
     data = pd.DataFrame(zip([i for i in range(len(data))], data))
     return [data, peakCenters]
