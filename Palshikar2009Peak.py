@@ -1,9 +1,7 @@
-from operator import ne
-from timeit import repeat
-from matplotlib.cbook import index_of
-import numpy as np, pandas as pd, math, matplotlib.pyplot as plt
+
+import numpy as np, pandas as pd, matplotlib.pyplot as plt
 from sklearn.covariance import log_likelihood
-from sqlalchemy import true
+
 import parseData
 
 from sklearn.neighbors import KernelDensity
@@ -15,7 +13,7 @@ from scipy.stats.mstats import mquantiles
 
 class Spectrum:
     """
-    #the current sensitivity and width params are used only in the first implementation of hte algorithm. should refactor this so that the newer outlier approach takes these params. Also, should consider not running the peak finding algorithm until a method is called.  Also need to make sure all the attributes are being used and are not being duplicated
+    #the current sensitivity and width params are used only in the first implementation of hte algorithm. should refactor this so that the newer outlier approach takes these params. Also, should consider not running the peak finding algorithm until a method is called.  Also need to make sure all the attributes are being used and are not being duplicated. also, make all the getters and setters.
     ####################
     Spectrum object holds data for a spectrum. It has methods to implements a peak finding algorithm.
     """
@@ -47,12 +45,47 @@ class Spectrum:
         #combined methods...
         ## Hillclimbing method from entropy peaks
 
+    ###################################################################################
+    # GETTERS:
+    ###################################################################################
+
     def getPeaks(self) -> list:
         return self.peaks
+    def getData(self) -> pd.DataFrame:
+        return self.data
+    def getKDE(self) -> object:
+        return self.kde
+    def getLikelihoods(self) -> np.array:
+        return self.likelihoods    
+    def getProbabilities(self) -> np.array:
+        return self.probabilities
+    def getEntropies(self) -> np.array:
+        return self.entropies
+    def getMeanEntropy(self) -> np.float128:
+        return self.meanEntropy
+    def getSDEntropy(self) -> np.float128:
+        return self.sdEntropy
+    def getRegionalEntropy(self) -> np.array:
+        return self.regionalEntropy
+    def getOutliers(self) -> np.array:
+        return self.outliers
+    def getTau (self) -> np.float128:
+        return self.tau
+    def getEntropyOutliers (self) -> np.array:
+        return self.entropyOutliers
+    def getEntropyTau(self) -> np.float128:
+        return self.entropyTau
+
+    ###################################################################################
+    # SETTERS:
+    ###################################################################################
 
     def setPeaks(self, peaks:list) -> None:
         self.peaks = peaks
     
+    ###################################################################################
+    # METHODS:
+    ###################################################################################
 
     def estimateKernel(self) -> object:
         """
@@ -284,6 +317,8 @@ class Spectrum:
     #could also use HDBSCAN to find clusters, and use cluster centroids as starting points
     def clusterOutliers(self, data: list) -> object:
         """
+        #this can probably be removed, but should definitily be refactored to be more of a general tool if I keep it. The simpler distance based algorithm seems to be better for this purpose.
+
         clusters a one dimensional data set.
 
         returns: optics model object
