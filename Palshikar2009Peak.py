@@ -13,12 +13,11 @@ from generateData import generate
 from scipy.stats.mstats import mquantiles
 
 
-
-
-
 class Spectrum:
     """
-    Spectrum object holds data for a spectrum. It implements the peak finding algorithm
+    #the current sensitivity and width params are used only in the first implementation of hte algorithm. should refactor this so that the newer outlier approach takes these params. Also, should consider not running the peak finding algorithm until a method is called.  Also need to make sure all the attributes are being used and are not being duplicated
+    ####################
+    Spectrum object holds data for a spectrum. It has methods to implements a peak finding algorithm.
     """
     def __init__(self, pathToData = None, data=None, sensitivity = 0.6, width=10) -> None:
         self.data = parseData.parse(pathToData) if pathToData else data
@@ -50,6 +49,7 @@ class Spectrum:
 
     def getPeaks(self) -> list:
         return self.peaks
+
     def setPeaks(self, peaks:list) -> None:
         self.peaks = peaks
     
@@ -87,11 +87,15 @@ class Spectrum:
     def evaluateKDE(self) -> np.array:
         """
         Evaluates the scaled probability density at each point in the spectrum
+
+        Returns:  probability density estimated by the KDE.
         """
         return np.float128(np.exp(self.kde.score_samples(np.array(self.data[1]).reshape(-1, 1))))
 
     def calculateLog2OfArray(self) -> np.array:
         """
+        #this is only needed to calculate binary entropy, can refactor to use e and get rid of this function.
+
         Calculates the log2 of the array of probability densities
         """
         return np.float128(np.log2(self.probabilities))
@@ -100,6 +104,8 @@ class Spectrum:
 
     def entropy2(self, start:int, stop:int) -> float:
         """
+        #refactor this to use the ln values given by the kde
+
         Using the probability densities from the Kernel Density Estimate, this function calculates the Shannon entropy of the slice within the range given by the indices: (start, stop].
 
         H(sequence) = sum(prob(element_i)*ln(prob(element_i)))
@@ -117,6 +123,7 @@ class Spectrum:
 
     def calculateEntropyDifference(self, index:int) -> float:
         """
+        #Might not need this one, see if anything is using it
         Calculates the entropy of the sequence without the value at index.
 
         index: integer index of the wavelength to find the entropy of.
@@ -125,6 +132,7 @@ class Spectrum:
 
     def findOutliers(self, alpha:float = 0.90) -> np.array:
         """
+        #should merge this with findSmoothedEntropyOutliers, see note below
         This function calculates the alpha-th quantile of the KDE log Likilihoods. It uses this to filter out the normal data, and returns the indices of the outliers.py
 
         alpha: what quantile to calculate
@@ -135,12 +143,12 @@ class Spectrum:
         tau = mquantiles(self.likelihoods, 1. - alpha)
         #this finds indexes where likelihood is less than tau, which then needs to be flattend because of the output format:
         outliers= np.argwhere(self.likelihoods < tau).flatten()
-        print("Outliers found at locations: ", outliers)
         return outliers, tau
 
     def findSmoothedEntropyOutliers(self, alpha = 0.95):
         """
-        This function calculates the alpha-th quantile of the smoothed entropies. It uses this to filter out the normal data, and returns the indices of the outliers.py
+        #Should refactor this to be a general outlier detector with a argument
+        This function calculates the alpha-th quantile of the smoothed entropies. It uses this to filter out the 'normal' data, and returns the indices of the outliers
 
         alpha: what quantile to calculate
 
@@ -150,7 +158,6 @@ class Spectrum:
         tau = mquantiles(self.regionalEntropy, 1. - alpha)
         #this finds indexes where likelihood is less than tau, which then needs to be flattend because of the output format:
         outliers= np.argwhere(self.regionalEntropy < tau).flatten()
-        print("Outliers found at locations: ", outliers)
         return outliers, tau
 
     ######
@@ -158,6 +165,7 @@ class Spectrum:
     #####
     def evaluatePeaks(self, sensitivity:float, width:float) -> list:
         """
+        #CAN PROBABLY DISCARD THIS VERSION
         This function loops through the entropy values, and saves the indices of values that are more than a certain multiple of Standard Deviations away from the mean. This is controlled by the sensitivity parameter. Higher sensitivity means a peak has to be farther from the mean to be found.
 
         Sensitivity: how many sds away from mean does a peak need to be. higher sensitivity means peaks must be bigger to be counted.
@@ -203,12 +211,13 @@ class Spectrum:
         width: how wide of a band of wavelengths should be considered. this many right and left neigbours will be considered
         sensitivity: How far from mean should a wavelength be in order to be counted.
         """
+
         #the starting locations of the sliding window:
         center = width + 1
         left = 0
         right = 2 * width + 1
 
-        #initialize
+        #initialize list of entropies to the average (Values from 0:width and n-width:n will remain at the average to avoid NaN):
         regions = [self.meanEntropy for i in range(len(self.data))]
         while right <= len(self.entropies):
             region = self.entropies[left:right]
@@ -222,30 +231,62 @@ class Spectrum:
 
     #An algorithm that starts with outlier data and finds peaks using hillclimbing:
     #could also use HDBSCAN to find clusters, and use cluster centroids as starting points
-    def climb(self, points, visibility=2):
+    def descend(self, points:np.array) -> np.array:
         """
+        A simple hill climbing algorithm to find all peaks in a set of points by traversing left to right through all points.
+
+        points: an np array or list of the indices of the points in the spectrum to be evaluated
+
+        returns: np array of estimated peak indices
         """
         spectrum = self.data[1]
         peaks = []
-        ascending, index = True, 0
-        while index < len(points):
-            if ascending and index + 1 == len(points):#ascending and at and of data, ->peak, break out of loop
+        descending, index = True, 0
+        while True:
+            if descending and index + 1 == len(points):#descending and at and of data, ->peak, break out of loop
                 peaks.append(points[index])
                 break
-            elif ascending and spectrum[points[index]] > spectrum[points[index+1]]:#at a peak
+            elif index + 1 == len(points):
+                break
+            elif descending and spectrum[points[index]] < spectrum[points[index+1]]:#at a peak
                 peaks.append(points[index])
-                ascending = False
-            elif not ascending and spectrum[points[index]] <= spectrum[points[index+1]]:
-                ascending = True
+                descending = False
+            elif not descending and spectrum[points[index]] >= spectrum[points[index+1]]:
+                descending = True
             index += 1
-        return peaks
+        return np.array(peaks)
 
+    def explore(self, point:int, window:int = 5) -> int:
+        """
+        A simple algorithm to find the lowest point within a neighborhood window.
+
+        point: index of starting point to explore from
+
+        returns: index or indices of lowest point found during exploration
+        """
         
+        #handle edge cases:
+        if point+window+1 > len(self.data[1]):
+            neighborhood = self.data[1][point-window:len(self.data[1])]
+            indices = [i for i in range(point-window, len(self.data[1]))]
+        elif point < window:
+            neighborhood = self.data[1][0:point+window+1]
+            indices = [i for i in range(point+window+1)]
+        else:  #neighborhood is not on the edge:   
+            neighborhood = self.data[1][point-window:point+window+1]
+            indices = [i for i in range(point-window, point+window+1)]
+        minimum = min(neighborhood)
+        #in case of a tie, returns list with all indices:
+        
+        return [index for index, value in zip(indices, neighborhood) if value == minimum]
+
 
     #could also use HDBSCAN to find clusters, and use cluster centroids as starting points
-    def clusterOutliers(self, data):
+    def clusterOutliers(self, data: list) -> object:
         """
-        clusters a one dimensional data set
+        clusters a one dimensional data set.
+
+        returns: optics model object
         """
         model = OPTICS(min_samples=4).fit(data.reshape(-1, 1))
         return model
@@ -266,54 +307,170 @@ class Spectrum:
             [plt.axvline(self.peaks[i], c='red', alpha=0.5) for i in range(len(self.peaks))]
         plt.show()
 
+    def assess(self, estimated:list, true:list) -> float:
+        """
+        A function to assess the fit of the estimated peaks to the true peaks when synthetic data is used. This funciton assumes both lists are sorted.
+
+        estimated: a list of estimated peak indices
+        true: a list of true peak locaitons
+
+        returns: a float average error 
+        """
+        distanceMatrix = np.abs(estimated[:, None] - true[None, :])
+
+
+        totalError = 0
+        for estimatedPeak in estimated:
+            currentDistance = np.inf
+            for truePeak in true:
+                if currentDistance > np.abs(estimatedPeak-truePeak):
+                    currentDistance = np.abs(estimatedPeak-truePeak)
+                else: #this peak is a worse fit than the prior, save distance and break out of inner loop
+                    print(f"estimated: {estimatedPeak}. matched to: {truePeak}")
+                    totalError += currentDistance
+                    break
+        averageError = totalError / len(estimated)
+        return averageError
+
+    def findPeaksFromEntropyOutliers(self, threshold:int = 10) -> list:
+        """
+        This function implements a simple peak finding algorithm on outlier values of Shannon's entropy values. First it calls descend() on the outliers which is itself a simple algorithm to find the value closest to a local peak for each value in a set of indices. Then, in the nested list comprehension it runs explore() on the local peaks estimates. This function looks for a local peak in the neighborhood of a given point. The list comp then filters out duplicates. Finally, findGroups() groups together points in case there are multiple estimates for a single peak (i.e. closer than a threshold value), and averagePeaks averages those index values to arrive at a better estimate.
+
+        threshold: maximum distance between two points to be considered part of the same peak
+
+        returns: list of estimated peak indices.
+        """
+        
+        outliers = self.descend(self.entropyOutliers)
+        peaks = []
+        #this nested list comprehension does several things: 1) flattens the output of repeated calls to explore into a 1d list
+        #2) filters out duplicates, and 3) appends the results to the list of peaks
+        [peaks.append(index) for result in [self.explore(point) for point in outliers] for index in result if index not in peaks]
+        peaks = np.array(peaks)
+        #now need to find groups and average them:
+        #Threshold might need to be optimized for each dataset:
+        def findGroups(peaks:np.array):
+            """
+            This is an accessory function to group together peak estimates that are closer than a threshold value given as an argument in the parent function.
+
+            peaks: array of peak indices.
+
+            Returns: nested list of grouped indices
+            """       
+            groups = []
+            rowsToSkip = []
+            distanceMatrix = np.abs(peaks[:, None] - peaks[None, :])
+            for index, row in enumerate(distanceMatrix):
+                if index in rowsToSkip: 
+                    groups.append([])
+                    pass
+                else:
+                    
+                    groups.append([index])
+                    for index2, distance in enumerate(row):
+                        if distance < threshold and index2 not in groups[index]:
+                            groups[index].append(index2)
+                            rowsToSkip.append(index2)
+            return groups
+        def averagePeaks(groups:list) -> list:
+            """
+            This is an accessory function that averages grouped index values (using integer division). 
+
+            groups: a nested list of indices to be averaged (within subgroups)
+
+            Returns: flat list of averages for each sublist
+            """
+            averagedPeaks = []
+            for group in groups:
+                subgroup = []
+                for index in group:
+                    subgroup.append(peaks[index])
+                mean = np.floor(np.mean(subgroup))
+                averagedPeaks.append(mean)
+            return [int(peak) for peak in averagedPeaks if peak == peak]
+        groups = findGroups(peaks)
+        averagedPeaks = averagePeaks(groups)
+
+        print(groups)
+        print(peaks)
+        print("Score:", self.assess(peaks, self.data[1]))
+        print(averagedPeaks)
+        print("Score2", self.assess(averagedPeaks, self.data[1]))
+        
+        return averagedPeaks
+
 
     
 """
-To Test:
-[x] Instantiate a class
-[] do all features work
-    [x] get Peaks
-    [x] estimate Kernel
-    [x] evaluate KDE
-    [x] calculate log2 of array
-    []
-[] does the algorithm find peaks?
-[] can it handle large inputs
-"""
-if __name__ == '__main__':
-    data, peaks = generate(n=2000, noise = 2)
+To Do:
 
-    #print(data[1])
+[] Clean up the code, get rid of unnecessary functions
+[] look for duplicated calculations
+    [] distance matrix?
+[] look into a simple way to get outliers
+[] test with larger inputs (time it to see how it varies with n)
+[] test with more noise
+[] make the .show() method cleaner, and use code from below
+[] Time each segment of the algorithm with data of varying lengths
+"""
+
+if __name__ == '__main__':
+    data, realpeaks = generate(n=2000, noise = 4)
+
+
     spectrum1 = Spectrum(None, data=data, sensitivity=2)
-    #spectrum1.show(showPeaks=True)
-    #[print(spectrum1.entropies[peak]) for peak in peaks]
-    truePeaks = 0
-    falsePeaks = 0
-    for peak in spectrum1.peaks:
-        if peak in peaks:
-            truePeaks += 1
-        else: falsePeaks += 1
-    print(f'Correctly identified {truePeaks/len(peaks)}% of peaks')
-    print(f'Falsely identified {falsePeaks/len(spectrum1.peaks)}')
-    plt.subplots(3,1)
-    plt.subplot(311)
+  
+
+    #initiate plot
+    plt.subplots(5,1)
+    plt.subplot(511)
+    #show points found using outlier method
     plt.plot(spectrum1.data[1])
     #plt.scatter(x = spectrum1.outliers, y = spectrum1.data[1][spectrum1.outliers], c='red', alpha = 0.3)
     model = spectrum1.clusterOutliers(spectrum1.entropyOutliers)
     clusters = model.labels_
     plt.scatter(x=spectrum1.entropyOutliers, y = spectrum1.data[1][spectrum1.entropyOutliers], c =clusters, alpha = 0.5, cmap='Set1')
     plt.title("Spectrum showing outliers")
-    plt.subplot(312)
+
+    #points found using descend algorithm on outliers:
+    plt.subplot(512)
+    peaks = spectrum1.descend(spectrum1.entropyOutliers)
+    plt.plot(spectrum1.data[1])
+    plt.scatter(x=peaks, y = spectrum1.data[1][peaks], c = "red", alpha = .8)
+    plt.title('Peaks found using climb algorithm on outliers')
+
+    #points found using explore algorithm on descend points:
+    plt.subplot(513)
+
+    peaks2 = []
+    peaks2 = [index for result in [spectrum1.explore(point) for point in peaks] for index in result if index not in peaks2]
+    
+    #peaks = [peak for peak in peaks if peak not in peaks]
+
+    #peaks = [index for result in [spectrum1.explore(point) for point in peaks] for index in result]
+    print("Found peaks: \n", peaks)
+    #[print(spectrum1.data[1][peak]) for peak in peaks]
+    plt.plot(spectrum1.data[1])
+    plt.scatter(x=peaks, y = spectrum1.data[1][peaks], c = "red", alpha = .8)
+    plt.title('Peaks found using explore algorithm on descend points')
+
+    #regional entropy:
+    plt.subplot(514)
     plt.plot(spectrum1.regionalEntropy)
     plt.axhline(spectrum1.entropyTau, c = "red", alpha=0.6)
     plt.title("Smoothed Entropies")
-    plt.subplot(313)
+
+    #likelihoods:
+    plt.subplot(515)
     plt.plot(spectrum1.likelihoods)
     plt.axhline(spectrum1.tau, c = "red", alpha=0.6)
     plt.title("KDE Likelihoods and tau")
-    plt.tight_layout()
-    plt.show()
 
     
+    plt.tight_layout()
+    #plt.show()
 
-   
+    
+        
+    spectrum1.findPeaksFromEntropyOutliers()
+    print(spectrum1)

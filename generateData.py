@@ -12,8 +12,8 @@ def generate( n:int=1000, nPeaks:int = 10, noise:float = 1, peakwidthsVariabilit
     peakHeights = [np.random.rand() * peakHeightVariability + 90 for i in range(nPeaks)]
 
     #an initial string of random numbers centered on 0:
-    data = np.random.normal(0,noise,n)
-
+    data = np.random.normal(location = 0, scale = noise, size =n)
+    
     #Make the peaks and add them to the data:
     for center, width, height in zip(peakCenters, peakwidths, peakHeights):
         peak = makePeak(width=width, height=height)
