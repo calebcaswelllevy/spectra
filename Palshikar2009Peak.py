@@ -82,6 +82,51 @@ class Spectrum:
 
     def setPeaks(self, peaks:list) -> None:
         self.peaks = peaks
+    def setData(self, data:pd.DataFrame) -> None:
+        self.data = data
+    def setKDE(self, kde:object) -> None:
+        self.kde = kde
+    def setLikelihoods(self, likelihoods:np.array) -> None:
+        self.likelihoods = likelihoods
+    def setProbabilities(self, probabilities:np.array) -> None:
+        self.probabilities = probabilities
+    def setEntropies(self, entropies:np.array) -> None:
+        self.entropies = entropies
+    def setMeanEntropy(self, meanEntropy:np.float128) -> None:
+        self.meanEntropy = meanEntropy
+    def setSDEntropy(self, sd:np.float128) -> None:
+        self.sdEntropy = sd
+    def setRegionalEntropy(self, regionalEntropy:np.array) -> None:
+        self.regionalEntropy = regionalEntropy
+    def setOutliers(self, outliers:np.array) -> None:
+        self.outliers = outliers
+    def setTau (self, tau:np.float128) -> None:
+        self.tau = tau
+    def setEntropyOutliers (self, entropyOutliers) -> None:
+        self.entropyOutliers = entropyOutliers
+    def setEntropyTau(self, tau) -> None:
+        self.entropyTau = tau
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     
     ###################################################################################
     # METHODS:

@@ -1,9 +1,17 @@
 import numpy as np, matplotlib.pyplot as plt, pandas as pd
 
 
-def generate( n:int=1000, nPeaks:int = 10, noise:float = 1, peakwidthsVariability:float = 1, peakHeightVariability:float = 20) -> None:
+def generate( n:int=1000, nPeaks:int = 10, noise:float = 1, peakwidthsVariability:float = 1, peakHeightVariability:float = 20) -> List:
     """
-    
+    Generates an artificial spectrum. Random noise is modeled as a normal distribution centered on zero with a SD controlled by the noise parameter. The peaks are randomly generated and modeled by parabolas. Their height and width are random drawn from a uniform distribution, and are modifiable using the peakWidthsvariability and peakheightvariability parameters.
+
+    n: the size of the spectrum to return
+    nPeaks: the number of peaks in the spectrum
+    noise: the sigma squared parameter of the normal distribution that models the noise of the spectrum. bigger means noisier.
+    peakwidthsVariability: how much random variation in the width of the peaks?
+    peakHeightVariability: how much random variation in the height of the peaks?
+
+    Returns: a list with two elements. 1) the spectrum as a pandas DataFrame, and 2) the indices of the centers of the simulated peaks. 
     """
     peakCenters = np.random.randint(low=20, high=n-20,size=nPeaks)
     minimumPeakWidth = 10-peakwidthsVariability
@@ -23,9 +31,14 @@ def generate( n:int=1000, nPeaks:int = 10, noise:float = 1, peakwidthsVariabilit
     data = pd.DataFrame(zip([i for i in range(len(data))], data))
     return [data, peakCenters]
 
-def makePeak(width:int, height:int=100):
+def makePeak(width:int, height:float=100) -> list:
     """
-    
+    This is an accessory function that generates a parabolic peak of width and height given in argments. 
+
+    width: integer width of the peak
+    height: float height of peak
+
+    Returns: list of values of the peak
     """
    
     rightSide = [-x**2 for x in range(width+1)]
