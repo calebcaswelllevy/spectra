@@ -1,7 +1,7 @@
 import numpy as np, matplotlib.pyplot as plt, pandas as pd
 
 
-def generate( n:int=1000, nPeaks:int = 10, noise:float = 1, peakwidthsVariability:float = 1, peakHeightVariability:float = 20) -> List:
+def generate( n:int=1000, nPeaks:int = 10, noise:float = 1, peakwidthsVariability:float = 1, peakHeightVariability:float = 20) -> list:
     """
     Generates an artificial spectrum. Random noise is modeled as a normal distribution centered on zero with a SD controlled by the noise parameter. The peaks are randomly generated and modeled by parabolas. Their height and width are random drawn from a uniform distribution, and are modifiable using the peakWidthsvariability and peakheightvariability parameters.
 
@@ -20,8 +20,8 @@ def generate( n:int=1000, nPeaks:int = 10, noise:float = 1, peakwidthsVariabilit
     peakHeights = [np.random.rand() * peakHeightVariability + 90 for i in range(nPeaks)]
 
     #an initial string of random numbers centered on 0:
-    data = np.random.normal(location = 0, scale = noise, size =n)
-    
+    data = np.random.normal(loc = 0, scale = noise, size =n)
+    np.random.normal()
     #Make the peaks and add them to the data:
     for center, width, height in zip(peakCenters, peakwidths, peakHeights):
         peak = makePeak(width=width, height=height)
