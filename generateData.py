@@ -29,6 +29,7 @@ def generate( n:int=1000, nPeaks:int = 10, noise:float = 1, peakwidthsVariabilit
             data[index2] -= peak[index1]
             
     data = pd.DataFrame(zip([i for i in range(len(data))], data))
+    
     return [data, peakCenters]
 
 def makePeak(width:int, height:float=100) -> list:

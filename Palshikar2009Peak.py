@@ -17,38 +17,21 @@ class Spectrum:
     ####################
     Spectrum object holds data for a spectrum. It has methods to implements a peak finding algorithm.
     """
-    def __init__(self, pathToData = None, data=None, alpha = 0.92, neighborhoodSize=5, entropyRegionSize=2) -> None:
+    def __init__(self, pathToData = None, data=None) -> None:
         self.data = parseData.parse(pathToData) if pathToData else data
-        
         self.peaks = []
-        self.neighborhoodSize = neighborhoodSize
-        #Calculate the Kernel Density Estimate:
-        t1 = time.perf_counter()
-        self.kde = self.estimateKernel()
-        t2 = time.perf_counter()
-        print("Kernel Density took: ", t2-t1, "seconds")
-        #Evaluate the kde on the points to get the likelihoods:
-        t1 = time.perf_counter()
-        self.likelihoods = self.kde.score_samples(np.array(self.data[1]).reshape(-1, 1))
-        t2 = time.perf_counter()
-        print(f'likelihood calculations took: {t2-t1} seconds')
-        #exponentiate the likelihoods to get the probabilities:
-        self.probabilities = np.float128(np.exp(self.likelihoods))
-        #calculate the Shannon's entropy, mean and SD:
-        self.entropies = np.float128(-self.probabilities*self.likelihoods)
-        self.meanEntropy = np.mean(self.entropies)
-        self.sdEntropy = np.std(self.entropies)
-        #Apply a smoothing function to the entropy values:
-        t1 = time.perf_counter()
-        self.regionalEntropy = self.findRegionsOfHighEntropy(width = entropyRegionSize)
-        t2 = time.perf_counter()
-        print(f'regional entropy function took {t2-t1} seconds')
-        #To implement:
-        #outlier score and tau (cutoff value)
-        t1 = time.perf_counter()
-        self.outliers, self.tau = self.findOutliers(data=self.regionalEntropy, alpha = alpha)
-        t2 = time.perf_counter()
-        print(f'Find outliers took {t2-t1} seconds')
+        self.neighborhoodSize = None
+        self.kde = None
+        self.likelihoods = None
+        self.probabilities = None
+        self.entropies = None
+        self.meanEntropy = None
+        self.sdEntropy = None
+        self.regionalEntropy = None
+        self.outliers = None
+        self.tau = None
+    
+       
 
         #Outliers of regional/smoothed entropy:
         #self.entropyOutliers, self.entropyTau = self.findOutliers(data=self.regionalEntropy, alpha = alpha)
@@ -141,6 +124,49 @@ class Spectrum:
     ###################################################################################
     # METHODS:
     ###################################################################################
+    def findPeaks(self, alpha=0.95, neighborhoodSize=5, entropyRegionSize = 2, method:str="palshikar")->None:
+        """TO WRITE:
+        A wrapper function that calls the appropriate algorithm. It then sets self.peaks to the output value of the method called
+        """
+        t0 = time.perf_counter()
+        methods = ["palshikar"]
+        if method not in methods:
+            raise ValueError(f"{method} is not an accepted method.\nAccepted methods: {methods}")
+        elif method == "palshikar":
+            self.neighborhoodSize = neighborhoodSize
+
+            if not self.kde:
+                #print("Fitting Kernel Density Estimate (This can take a while with large datasets)...")
+                t1 = time.perf_counter()
+                self.setKDE(self.estimateKernel())
+                t2 = time.perf_counter()
+                #print(f"Done. Took {t2-t1} seconds.")
+            if not self.likelihoods:
+                #print('Calculating Entropy Values...')
+                t1 = time.perf_counter()
+                self.setLikelihoods(self.kde.score_samples(np.array(self.data[1]).reshape(-1, 1)))
+                self.setProbabilities(np.float128(np.exp(self.likelihoods)))
+                self.setEntropies(np.float128(-self.probabilities*self.likelihoods))
+                self.setMeanEntropy(np.mean(self.entropies))
+                self.setSDEntropy(np.std(self.entropies))
+                self.setRegionalEntropy(self.findRegionsOfHighEntropy(width = entropyRegionSize))
+                t2 = time.perf_counter()
+                #print(f"Done. Took {t2-t1} seconds.")
+            if not self.outliers:
+                #print("Finding outlier points...")
+                t1 = time.perf_counter()
+                outliers, tau = self.findOutliers(data=self.regionalEntropy, alpha = alpha)
+                self.setOutliers(outliers)
+                self.setTau(tau)
+                t2 = time.perf_counter()
+                #print(f"Done. Took {t2-t1} seconds")
+            #print("Running peak finding algorithm...")
+            t1 = time.perf_counter()
+            self.setPeaks(self.findPeaksFromEntropyOutliers(self.outliers, threshold = neighborhoodSize))
+            t2 = time.perf_counter()
+            #print(f"Finished search. Total time: {t2-t0} seconds.")
+            #print(f"Found {len(self.peaks)} peaks.")
+
 
     def estimateKernel(self) -> object:
         """
@@ -186,6 +212,12 @@ class Spectrum:
         tau = mquantiles(data, 1. - alpha)
         #this finds indexes where likelihood is less than tau, which then needs to be flattend because of the output format:
         outliers= np.argwhere(data < tau).flatten()
+        while len(outliers) < 1:
+            #print(f'No outliers found, adjusting alpha from {alpha} to {alpha*0.9}')
+            alpha = 0.9*alpha
+            tau = mquantiles(data, 1. - alpha)
+            outliers= np.argwhere(data < tau).flatten()
+
         return outliers, tau
 
    
@@ -292,7 +324,7 @@ class Spectrum:
         plt.title("Spectrum")
         if showPeaks:
             peakValues = [self.data[1][i] for i in self.peaks]
-            #print(peakValues)
+            ##print(peakValues)
             plt.scatter(self.peaks, peakValues, c='red')
         if showEntropy:
 
@@ -323,10 +355,12 @@ class Spectrum:
         averageError = totalError / len(estimated)
         return averageError
 
-    def findPeaksFromEntropyOutliers(self, threshold:int = 10) -> list:
+    def findPeaksFromEntropyOutliers(self, data:np.array, threshold:int = 10) -> list:
         """
-        ###REFACTOR this to take a data argument to replace self.outliers, make it general###
+        ###CONSIDER REFACTORING using a while loop that runs descend and explore several times###
         This function implements a simple peak finding algorithm on outlier values of Shannon's entropy values. First it calls descend() on the outliers which is itself a simple algorithm to find the value closest to a local peak for each value in a set of indices. Then, in the nested list comprehension it runs explore() on the local peaks estimates. This function looks for a local peak in the neighborhood of a given point. The list comp then filters out duplicates. Finally, findGroups() groups together points in case there are multiple estimates for a single peak (i.e. closer than a threshold value), and averagePeaks averages those index values to arrive at a better estimate.
+
+        data: array of indices to run the algorithm on. They serve as "seeds" to start the search for peaks. For best results, they should be close to peak regions.
 
         threshold: maximum distance between two points to be considered part of the same peak
 
@@ -382,12 +416,6 @@ class Spectrum:
             return np.array([int(peak) for peak in averagedPeaks if peak == peak])
         groups = findGroups(peaks)
         averagedPeaks = averagePeaks(groups)
-
-        print(groups)
-        print(peaks)
-        print("Score:", self.assess(peaks, realpeaks))
-        print(averagedPeaks)
-        print("Score2", self.assess(averagedPeaks, realpeaks))
         
         return averagedPeaks
 
@@ -414,17 +442,19 @@ To Do:
 """
 
 if __name__ == '__main__':
-    data, realpeaks = generate(n=2000, noise = 4)
+    data, realpeaks = generate(n=2000, noise = 40)
     realpeaks.sort()
 
-    spectrum1 = Spectrum(None, data=data, alpha=0.95)
+    spectrum1 = Spectrum(None, data=data)
+    spectrum1.findPeaks(method="palshikar", alpha = 0.95)
   
 
     #initiate plot
-    plt.subplots(5,1)
-    plt.subplot(511)
+    plt.subplots(4,1)
+    plt.subplot(411)
     #show points found using outlier method
     plt.plot(spectrum1.data[1])
+    [plt.axvline(peak, c='red', alpha=0.6) for peak in realpeaks]
     #plt.scatter(x = spectrum1.outliers, y = spectrum1.data[1][spectrum1.outliers], c='red', alpha = 0.3)
     #model = spectrum1.clusterOutliers(spectrum1.entropyOutliers)
     #clusters = model.labels_
@@ -432,14 +462,14 @@ if __name__ == '__main__':
     #plt.title("Spectrum showing outliers")
 
     #points found using descend algorithm on outliers:
-    plt.subplot(512)
+    plt.subplot(412)
     peaks = spectrum1.descend(spectrum1.outliers)
     plt.plot(spectrum1.data[1])
     plt.scatter(x=peaks, y = spectrum1.data[1][peaks], c = "red", alpha = .8)
     plt.title('Peaks found using climb algorithm on outliers')
 
     #points found using explore algorithm on descend points:
-    plt.subplot(513)
+    plt.subplot(413)
 
     peaks2 = []
     peaks2 = [index for result in [spectrum1.explore(point) for point in peaks] for index in result if index not in peaks2]
@@ -447,74 +477,26 @@ if __name__ == '__main__':
     #peaks = [peak for peak in peaks if peak not in peaks]
 
     #peaks = [index for result in [spectrum1.explore(point) for point in peaks] for index in result]
-    print("Found peaks: \n", peaks)
-    #[print(spectrum1.data[1][peak]) for peak in peaks]
+    #print("Found peaks: \n", peaks)
+    #[#print(spectrum1.data[1][peak]) for peak in peaks]
     plt.plot(spectrum1.data[1])
     plt.scatter(x=peaks, y = spectrum1.data[1][peaks], c = "red", alpha = .8)
+    
     plt.title('Peaks found using explore algorithm on descend points')
 
     #regional entropy:
-    plt.subplot(514)
+    plt.subplot(414)
     plt.plot(spectrum1.regionalEntropy)
     plt.axhline(spectrum1.tau, c = "red", alpha=0.6)
     plt.title("Smoothed Entropies")
 
     #likelihoods:
-    plt.subplot(515)
-    plt.plot(spectrum1.likelihoods)
-    plt.axhline(spectrum1.tau, c = "red", alpha=0.6)
-    plt.title("KDE Likelihoods and tau")
 
     
     plt.tight_layout()
     plt.show()
 
+
+
+
     
-        
-    spectrum1.findPeaksFromEntropyOutliers()
-
-
-
-    """def evaluatePeaks(self, sensitivity:float, width:float) -> list:
-        
-        #CAN PROBABLY DISCARD THIS VERSION
-        This function loops through the entropy values, and saves the indices of values that are more than a certain multiple of Standard Deviations away from the mean. This is controlled by the sensitivity parameter. Higher sensitivity means a peak has to be farther from the mean to be found.
-
-        Sensitivity: how many sds away from mean does a peak need to be. higher sensitivity means peaks must be bigger to be counted.
-
-        Width: How far apart peaks are to be considered distict. A higher width parameter means less peaks.
-
-        Returns: a list of  
-  
-
-        #filter peaks out that are less than a certain number of SDs from the mean:
-        peaks = [index for index, entropy in enumerate(self.entropies) if -(entropy - self.meanEntropy) > (sensitivity * self.sdEntropy)]
-
-        #Retain only one peak out of any set of peaks within k distance of each other:
-        #Need to think about this and make it better:
-        #print(f"peaks found: {peaks}")
-        filteredPeaks = []
-        startingPoint = 0
-        while startingPoint < len(peaks):
-            
-            endingPoint = 1
-
-            currentGroup = {peaks[startingPoint]: self.data[1][peaks[startingPoint]]}
-
-            #find the group within k distance:
-            while ((startingPoint+endingPoint) < len(peaks)) and (np.abs(peaks[startingPoint] - peaks[startingPoint+endingPoint]) <= width):
-                currentGroup[peaks[startingPoint+endingPoint]] = self.data[1][peaks[startingPoint+endingPoint]]
-
-                endingPoint += 1
-            #find the bigest member of the group and add it to the list:
-            filteredPeaks.append(max(currentGroup))
-
-            
-            #increment up the window:
-            startingPoint += endingPoint
-    
-
-        print(f"\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\nFound the following {len(filteredPeaks)} peaks: \n")
-        [print(i, " - ", self.data[1][i]) for i in filteredPeaks]
-        return filteredPeaks
-  """
