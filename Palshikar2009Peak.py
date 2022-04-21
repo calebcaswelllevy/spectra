@@ -30,6 +30,7 @@ class Spectrum:
         self.regionalEntropy = None
         self.outliers = None
         self.tau = None
+        self.alpha = None
     
        
 
@@ -124,10 +125,11 @@ class Spectrum:
     ###################################################################################
     # METHODS:
     ###################################################################################
-    def findPeaks(self, alpha=0.95, neighborhoodSize=5, entropyRegionSize = 2, method:str="palshikar")->None:
+    def findPeaks(self, alpha=0.94, neighborhoodSize=4, entropyRegionSize = 1, method:str="palshikar")->None:
         """TO WRITE:
         A wrapper function that calls the appropriate algorithm. It then sets self.peaks to the output value of the method called
         """
+        self.alpha = alpha
         t0 = time.perf_counter()
         methods = ["palshikar"]
         if method not in methods:
@@ -141,7 +143,7 @@ class Spectrum:
                 self.setKDE(self.estimateKernel())
                 t2 = time.perf_counter()
                 #print(f"Done. Took {t2-t1} seconds.")
-            if not self.likelihoods:
+            if self.likelihoods is None:
                 #print('Calculating Entropy Values...')
                 t1 = time.perf_counter()
                 self.setLikelihoods(self.kde.score_samples(np.array(self.data[1]).reshape(-1, 1)))
@@ -152,7 +154,7 @@ class Spectrum:
                 self.setRegionalEntropy(self.findRegionsOfHighEntropy(width = entropyRegionSize))
                 t2 = time.perf_counter()
                 #print(f"Done. Took {t2-t1} seconds.")
-            if not self.outliers:
+            if self.outliers is None:
                 #print("Finding outlier points...")
                 t1 = time.perf_counter()
                 outliers, tau = self.findOutliers(data=self.regionalEntropy, alpha = alpha)
@@ -199,7 +201,7 @@ class Spectrum:
         kde = grid.best_estimator_
         return kde
 
-    def findOutliers(self, data:np.array, alpha:float = 0.90 ):
+    def findOutliers(self, data:np.array, alpha:float ):
         """
         #Should refactor this to be a general outlier detector with a argument
         This function calculates the alpha-th quantile of the smoothed entropies. It uses this to filter out the 'normal' data, and returns the indices of the outliers
@@ -213,7 +215,7 @@ class Spectrum:
         #this finds indexes where likelihood is less than tau, which then needs to be flattend because of the output format:
         outliers= np.argwhere(data < tau).flatten()
         while len(outliers) < 1:
-            #print(f'No outliers found, adjusting alpha from {alpha} to {alpha*0.9}')
+            #If no outliers were found, adjust alpha downwards until some are detected:
             alpha = 0.9*alpha
             tau = mquantiles(data, 1. - alpha)
             outliers= np.argwhere(data < tau).flatten()
@@ -232,7 +234,8 @@ class Spectrum:
         """
         width: how wide of a band of wavelengths should be considered. this many right and left neigbours will be considered
         """
-
+        if width == 0:
+            return self.entropies
         #the starting locations of the sliding window:
         center = width + 1
         left = 0
@@ -343,17 +346,36 @@ class Spectrum:
         returns: a float average error 
         """
         
+        
         totalError = 0
+        peaks_found = [0 for peak in true]
         for estimatedPeak in estimated:
             currentDistance = np.inf
-            for truePeak in true:
+            for index, truePeak in enumerate([*true, -np.inf]):
                 if currentDistance >= np.abs(estimatedPeak-truePeak):
                     currentDistance = np.abs(estimatedPeak-truePeak)
                 else: #this peak is a worse fit than the prior, save distance and break out of inner loop
+                    if currentDistance <= 5:
+                        peaks_found[index-1] = 1
                     totalError += currentDistance
                     break
-        averageError = totalError / len(estimated)
-        return averageError
+        averageError = (totalError / (len(estimated) * len(self.data)))
+        return (1-averageError, np.sum(peaks_found)/len(true))
+
+    def bootstrap(self, estimated, real, n, sample_size = 100):
+        """
+        To do-----
+        """
+        scores = []
+        for i in range(sample_size): 
+            scores.append( self.assess(np.random.randint(0,n,len(estimated)), real))
+        estimate_score = self.assess(estimated, real)[0]
+        scores.append(estimate_score)
+        scores.sort()
+        
+        return (scores.index(estimate_score) / sample_size)
+
+
 
     def findPeaksFromEntropyOutliers(self, data:np.array, threshold:int = 10) -> list:
         """
@@ -424,72 +446,57 @@ class Spectrum:
 """
 To Do:
 
-[] Clean up the code, get rid of unnecessary functions
-[] Assess needs to raise a red flag if a true peak is missed
-[] look for duplicated calculations
+[X] Clean up the code, get rid of unnecessary functions
+[X] Assess needs to raise a red flag if a true peak is missed
+[X] look for duplicated calculations
     [X] distance matrix?
 [] look into a simple way to get outliers
 
 [] make the .show() method cleaner, and use code from below
-[] Time each segment of the algorithm with data of varying lengths
-[] test with larger inputs (time it to see how it varies with n)
-[] test with more noise
-[] Test the accuracy of the algorithm with varying:
-    [] NeighborhoodSize (used in the explore subroutine to merge close peaks)
-    [] alpha (used in the outlier search)
+[X] Time each segment of the algorithm with data of varying lengths
+[X] test with larger inputs (time it to see how it varies with n)
+[X] test with more noise
+[X] Test the accuracy of the algorithm with varying:
+    [X] NeighborhoodSize (used in the explore subroutine to merge close peaks)
+    [X] alpha (used in the outlier search)
 [] Learn about Virtual Environments in python
 [] set up virtual environment for this project
+[] implement version of peakfinder that calculates kde for segments of the curve
+[] implement version of peakfinder that calculated 2d kde for curve
+[] implement non-rectified data generation
+[] test algorithm on non-rectified data
 """
 
 if __name__ == '__main__':
-    data, realpeaks = generate(n=2000, noise = 40)
+    data, realpeaks = generate(n=2000, noise = 10)
     realpeaks.sort()
 
     spectrum1 = Spectrum(None, data=data)
-    spectrum1.findPeaks(method="palshikar", alpha = 0.95)
+    spectrum1.findPeaks(method="palshikar", alpha = 0.96, entropyRegionSize=2)
   
 
     #initiate plot
-    plt.subplots(4,1)
-    plt.subplot(411)
+    plt.subplots(2,1)
+    plt.subplot(211)
     #show points found using outlier method
     plt.plot(spectrum1.data[1])
+    plt.axvline(realpeaks[0], c='red', alpha=.6, label="True Lines")
     [plt.axvline(peak, c='red', alpha=0.6) for peak in realpeaks]
-    #plt.scatter(x = spectrum1.outliers, y = spectrum1.data[1][spectrum1.outliers], c='red', alpha = 0.3)
-    #model = spectrum1.clusterOutliers(spectrum1.entropyOutliers)
-    #clusters = model.labels_
-    #plt.scatter(x=spectrum1.entropyOutliers, y = spectrum1.data[1][spectrum1.entropyOutliers], c =clusters, alpha = 0.5, cmap='Set1')
-    #plt.title("Spectrum showing outliers")
 
-    #points found using descend algorithm on outliers:
-    plt.subplot(412)
-    peaks = spectrum1.descend(spectrum1.outliers)
-    plt.plot(spectrum1.data[1])
-    plt.scatter(x=peaks, y = spectrum1.data[1][peaks], c = "red", alpha = .8)
-    plt.title('Peaks found using climb algorithm on outliers')
-
-    #points found using explore algorithm on descend points:
-    plt.subplot(413)
-
-    peaks2 = []
-    peaks2 = [index for result in [spectrum1.explore(point) for point in peaks] for index in result if index not in peaks2]
-    
-    #peaks = [peak for peak in peaks if peak not in peaks]
-
-    #peaks = [index for result in [spectrum1.explore(point) for point in peaks] for index in result]
-    #print("Found peaks: \n", peaks)
-    #[#print(spectrum1.data[1][peak]) for peak in peaks]
-    plt.plot(spectrum1.data[1])
-    plt.scatter(x=peaks, y = spectrum1.data[1][peaks], c = "red", alpha = .8)
-    
-    plt.title('Peaks found using explore algorithm on descend points')
+    peaks = spectrum1.getPeaks()
+    plt.scatter(x=peaks, y = spectrum1.data[1][peaks], c = "black", alpha = .8, label = "Inferred Lines")
+    plt.ylabel('Intensity')
+    plt.title('Simulated non-noisy Spectrum showing true and inferred peaks')
+    plt.legend(loc = "upper right")
 
     #regional entropy:
-    plt.subplot(414)
+    plt.subplot(212)
     plt.plot(spectrum1.regionalEntropy)
-    plt.axhline(spectrum1.tau, c = "red", alpha=0.6)
-    plt.title("Smoothed Entropies")
-
+    plt.axhline(spectrum1.tau, c = "red", alpha=0.6, label = "tau")
+    plt.title(f"Smoothed Entropies for Outlier Detection (alpha = {spectrum1.alpha})")
+    plt.ylabel("Shannon\'s Entropy")
+    plt.xlabel("\'Wavelength\'")
+    plt.legend()
     #likelihoods:
 
     
