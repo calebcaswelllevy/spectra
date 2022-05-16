@@ -125,52 +125,98 @@ class Spectrum:
     ###################################################################################
     # METHODS:
     ###################################################################################
-    def findPeaks(self, alpha=0.94, neighborhoodSize=4, entropyRegionSize = 1, method:str="palshikar")->None:
+    def findPeaks(self, alpha=0.94, neighborhoodSize=4, entropyRegionSize = 1, method:str="palshikar", segment_size:int=50)->None:
         """TO WRITE:
-        A wrapper function that calls the appropriate algorithm. It then sets self.peaks to the output value of the method called
+            A wrapper function that calls the appropriate algorithm. It then sets self.peaks to the output value of the method called
+            alpha:
+            neighborhoodSize:
+            entropyRegionSize:
+            method:
+            segment_size:
+
+            Returns: None
         """
         self.alpha = alpha
         t0 = time.perf_counter()
-        methods = ["palshikar"]
+        methods = ["palshikar", "segmented"]
         if method not in methods:
             raise ValueError(f"{method} is not an accepted method.\nAccepted methods: {methods}")
-        elif method == "palshikar":
+        elif method in ["palshikar", "segmented"]:
             self.neighborhoodSize = neighborhoodSize
 
             if not self.kde:
-                #print("Fitting Kernel Density Estimate (This can take a while with large datasets)...")
-                t1 = time.perf_counter()
-                self.setKDE(self.estimateKernel())
-                t2 = time.perf_counter()
-                #print(f"Done. Took {t2-t1} seconds.")
+                if method == "palshikar":
+                    self.setKDE(self.estimateKernel())
+                elif method == "segmented":
+                    self.setKDE(self.segmentedKernel(segment_size))
             if self.likelihoods is None:
-                #print('Calculating Entropy Values...')
-                t1 = time.perf_counter()
                 self.setLikelihoods(self.kde.score_samples(np.array(self.data[1]).reshape(-1, 1)))
                 self.setProbabilities(np.float128(np.exp(self.likelihoods)))
                 self.setEntropies(np.float128(-self.probabilities*self.likelihoods))
                 self.setMeanEntropy(np.mean(self.entropies))
                 self.setSDEntropy(np.std(self.entropies))
                 self.setRegionalEntropy(self.findRegionsOfHighEntropy(width = entropyRegionSize))
-                t2 = time.perf_counter()
-                #print(f"Done. Took {t2-t1} seconds.")
             if self.outliers is None:
-                #print("Finding outlier points...")
-                t1 = time.perf_counter()
                 outliers, tau = self.findOutliers(data=self.regionalEntropy, alpha = alpha)
                 self.setOutliers(outliers)
                 self.setTau(tau)
-                t2 = time.perf_counter()
-                #print(f"Done. Took {t2-t1} seconds")
-            #print("Running peak finding algorithm...")
-            t1 = time.perf_counter()
-            self.setPeaks(self.findPeaksFromEntropyOutliers(self.outliers, threshold = neighborhoodSize))
-            t2 = time.perf_counter()
-            #print(f"Finished search. Total time: {t2-t0} seconds.")
-            #print(f"Found {len(self.peaks)} peaks.")
+            self.setPeaks()
 
 
-    def estimateKernel(self) -> object:
+            return
+
+
+    def statistical_rectifier(self, alpha, segment_width ):
+        """
+
+        The idea here would be to fit a kde, remove the biggest outliers, fit a kde, remove outliers etc until some
+        stopping condition.
+
+         kernel, bandwidth <- optimize kde params
+        data = self.data.copy()
+        While outliers:
+            probabilities = [1 for i in data - 2 * segment_width]
+            for i between segment_width and n - segment_width + 1:
+                fit kernel to data centered on data[i], ranging from data[i-segment_width] to data[i+segment_width+1]
+                p = evaluate probability of point
+                probabilities[i] = p
+            outliers, tau = self.findOutliers(p, alpha)
+            #drop outliers
+            data = data[data[0] not in outliers]
+
+        #fit a spline to the leftover points
+        #predict missing values using the spline
+        #subtract the spline from the spectrum
+
+
+        """
+        # copy the data
+        data = self.data.copy()
+        # parameter vals to evaluate
+        h_vals = np.arange(0.05, 1, 0.3)
+        # Kernel types to evaluate:
+        kernels = ['epanechnikov']
+
+        # Optimize h (smoothing parameter) and kernel type:
+        grid = GridSearchCV(KernelDensity(),
+                            {'bandwidth': h_vals,
+                             'kernel': kernels
+                             })
+        grid.fit(np.array(data[1]).reshape(-1, 1) )
+        params = grid.best_params_
+        bandwidth = params['bandwidth']
+
+        #outer loop:
+        outliers = True
+
+        while outliers:
+            n = len(data[0])
+            probabilities = [0 for i in range(len(data[0]))]
+            for i in range(segment_width, n - segment_width + 1):
+                sub_data = data[i]
+                kernel = KernelDensity(bandwidth = bandwidth, kernel="epanechnikov")
+
+    def estimateKernel(self, two_d = False) -> object:
         """
         ###This is lagging hard, probably due to gridsearch. need to optimize
         Method to estimate kernel density for spectrum. This is used to get probability density and entropy of segments of the spectrum.
@@ -196,14 +242,19 @@ class Spectrum:
         grid = GridSearchCV(KernelDensity(),
     {'bandwidth': h_vals, 'kernel': kernels},
     scoring=my_scores)
+
         grid.fit(np.array(self.data[1]).reshape(-1, 1))
+
         #save best model
         kde = grid.best_estimator_
         return kde
 
+    def segmentedKernel(self, segment_size:int = 50)->object:
+        pass
+
     def findOutliers(self, data:np.array, alpha:float ):
         """
-        #Should refactor this to be a general outlier detector with a argument
+        Should refactor this to be a general outlier detector with a argument
         This function calculates the alpha-th quantile of the smoothed entropies. It uses this to filter out the 'normal' data, and returns the indices of the outliers
 
         alpha: what quantile to calculate
@@ -211,6 +262,7 @@ class Spectrum:
         Returns: np array of indices of outliers
         """
         #caluclate the alpha-quantile of the spectrum:
+
         tau = mquantiles(data, 1. - alpha)
         #this finds indexes where likelihood is less than tau, which then needs to be flattend because of the output format:
         outliers= np.argwhere(data < tau).flatten()
@@ -232,7 +284,7 @@ class Spectrum:
 
     def findRegionsOfHighEntropy(self, width:float) -> list:
         """
-        width: how wide of a band of wavelengths should be considered. this many right and left neigbours will be considered
+        width: how wide of a band of wavelengths should be considered. this many right and left neighbors will be considered
         """
         if width == 0:
             return self.entropies
@@ -459,11 +511,12 @@ To Do:
 [X] Test the accuracy of the algorithm with varying:
     [X] NeighborhoodSize (used in the explore subroutine to merge close peaks)
     [X] alpha (used in the outlier search)
-[] Learn about Virtual Environments in python
-[] set up virtual environment for this project
+[X] Learn about Virtual Environments in python
+[X] set up virtual environment for this project
 [] implement version of peakfinder that calculates kde for segments of the curve
 [] implement version of peakfinder that calculated 2d kde for curve
-[] implement non-rectified data generation
+[] implement rectification approximator with lines
+[X] implement non-rectified data generation
 [] test algorithm on non-rectified data
 """
 
@@ -472,38 +525,39 @@ if __name__ == '__main__':
     realpeaks.sort()
 
     spectrum1 = Spectrum(None, data=data)
-    spectrum1.findPeaks(method="palshikar", alpha = 0.96, entropyRegionSize=2)
-  
+    # spectrum1.findPeaks(method="palshikar", alpha = 0.96, entropyRegionSize=2)
+    #
+    #
+    # #initiate plot
+    # plt.subplots(2,1)
+    # plt.subplot(211)
+    # #show points found using outlier method
+    # plt.plot(spectrum1.data[1])
+    # plt.axvline(realpeaks[0], c='red', alpha=.6, label="True Lines")
+    # [plt.axvline(peak, c='red', alpha=0.6) for peak in realpeaks]
+    #
+    # peaks = spectrum1.getPeaks()
+    # plt.scatter(x=peaks, y = spectrum1.data[1][peaks], c = "black", alpha = .8, label = "Inferred Lines")
+    # plt.ylabel('Intensity')
+    # plt.title('Simulated non-noisy Spectrum showing true and inferred peaks')
+    # plt.legend(loc = "upper right")
+    #
+    # #regional entropy:
+    # plt.subplot(212)
+    # plt.plot(spectrum1.regionalEntropy)
+    # plt.axhline(spectrum1.tau, c = "red", alpha=0.6, label = "tau")
+    # plt.title(f"Smoothed Entropies for Outlier Detection (alpha = {spectrum1.alpha})")
+    # plt.ylabel("Shannon\'s Entropy")
+    # plt.xlabel("\'Wavelength\'")
+    # plt.legend()
+    # #likelihoods:
+    #
+    #
+    # plt.tight_layout()
+    # plt.show()
 
-    #initiate plot
-    plt.subplots(2,1)
-    plt.subplot(211)
-    #show points found using outlier method
-    plt.plot(spectrum1.data[1])
-    plt.axvline(realpeaks[0], c='red', alpha=.6, label="True Lines")
-    [plt.axvline(peak, c='red', alpha=0.6) for peak in realpeaks]
 
-    peaks = spectrum1.getPeaks()
-    plt.scatter(x=peaks, y = spectrum1.data[1][peaks], c = "black", alpha = .8, label = "Inferred Lines")
-    plt.ylabel('Intensity')
-    plt.title('Simulated non-noisy Spectrum showing true and inferred peaks')
-    plt.legend(loc = "upper right")
-
-    #regional entropy:
-    plt.subplot(212)
-    plt.plot(spectrum1.regionalEntropy)
-    plt.axhline(spectrum1.tau, c = "red", alpha=0.6, label = "tau")
-    plt.title(f"Smoothed Entropies for Outlier Detection (alpha = {spectrum1.alpha})")
-    plt.ylabel("Shannon\'s Entropy")
-    plt.xlabel("\'Wavelength\'")
-    plt.legend()
-    #likelihoods:
-
-    
-    plt.tight_layout()
-    plt.show()
-
-
+    spectrum1.statistical_rectifier(alpha=0.9)
 
 
     

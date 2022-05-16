@@ -1,6 +1,9 @@
+
+
 import numpy as np, matplotlib.pyplot as plt, pandas as pd
+from functionTimer import measure_time
 
-
+@measure_time
 def generate( n:int=1000, nPeaks:int = 10, noise:float = 7, peakwidthsVariability:float = 1, peakHeightVariability:float = 20, peak_set:list = [], rectified = True) -> list:
     """
     Generates an artificial spectrum. Random noise is modeled as a normal distribution centered on zero with a SD controlled by the noise parameter. The peaks are randomly generated and modeled by parabolas. Their height and width are random drawn from a uniform distribution, and are modifiable using the peakWidthsvariability and peakheightvariability parameters.
@@ -44,7 +47,7 @@ def generate( n:int=1000, nPeaks:int = 10, noise:float = 7, peakwidthsVariabilit
     plt.subplot(313)
     plt.plot(data[1])
     [plt.axvline(peak, c='red', alpha = 0.6) for peak in peak_set]
-    plt.show()
+   # plt.show()
     # if rectified:
     #     data = pd.DataFrame(zip([i for i in range(len(data))], data))
     #
@@ -94,7 +97,7 @@ def make_group(n = 10, nPeaks = 20, spectrum_size = 2000):
     for i in range(n):
         spectra.append(generate(n=spectrum_size, nPeaks=nPeaks, peak_set=peak_locations))
     return spectra
-
+@measure_time
 def derectify(spectrum, slide_x:float=0, slide_y:float=1, stretch_x:float=2.5, stretch_y:float=5, calculate_values:bool = False):
     """TO DO"""
     if calculate_values:
@@ -119,7 +122,6 @@ def derectify(spectrum, slide_x:float=0, slide_y:float=1, stretch_x:float=2.5, s
         e = np.e
 
         y = [((e**x / (e**x + 1)) * (1- (e**x / (e**x + 1)))) for x in x_axis]
-        print(f'y = {y}')
 
         return y
 
@@ -155,7 +157,8 @@ if __name__ == '__main__':
     #
     #
     # print("generating")
-    data, peaks = generate(n=500, rectified=False)
+
+    data, peaks = generate(n=1000, rectified=False)
     # n = len(data)
     #
     #
