@@ -97,6 +97,7 @@ def make_group(n = 10, nPeaks = 20, spectrum_size = 2000):
     for i in range(n):
         spectra.append(generate(n=spectrum_size, nPeaks=nPeaks, peak_set=peak_locations))
     return spectra
+
 @measure_time
 def derectify(spectrum, slide_x:float=0, slide_y:float=1, stretch_x:float=2.5, stretch_y:float=5, calculate_values:bool = False):
     """TO DO"""

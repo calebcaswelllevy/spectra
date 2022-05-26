@@ -128,16 +128,17 @@ class Spectrum:
     def findPeaks(self, alpha=0.94, neighborhoodSize=4, entropyRegionSize = 1, method:str="palshikar", segment_size:int=50)->None:
         """TO WRITE:
             A wrapper function that calls the appropriate algorithm. It then sets self.peaks to the output value of the method called
-            alpha:
-            neighborhoodSize:
-            entropyRegionSize:
-            method:
-            segment_size:
+            :alpha: what quantile to use when calling find_outliers
+            :neighborhoodSize: To pass to param :window: in explore(). determines how wide an area to look at
+            :entropyRegionSize: How large of a region to consider when averaging local entropy.
+            :method: list of possible peak finding algorithms. Currently only two are implemented. Palsikar uses a modified version
+            of the method 5 in Palshikar 2009. Segmented is a variation that calculates KDEs for segments of the spectrum
+            in case there is heterogeneity across the spectrum.
+            :segment_size: how large of a region to consider if using the 'segmented' method.
 
             Returns: None
         """
         self.alpha = alpha
-        t0 = time.perf_counter()
         methods = ["palshikar", "segmented"]
         if method not in methods:
             raise ValueError(f"{method} is not an accepted method.\nAccepted methods: {methods}")
@@ -257,7 +258,7 @@ class Spectrum:
         Should refactor this to be a general outlier detector with a argument
         This function calculates the alpha-th quantile of the smoothed entropies. It uses this to filter out the 'normal' data, and returns the indices of the outliers
 
-        alpha: what quantile to calculate
+        alpha: what quantile to calculate to consider outliers
 
         Returns: np array of indices of outliers
         """
@@ -284,7 +285,9 @@ class Spectrum:
 
     def findRegionsOfHighEntropy(self, width:float) -> list:
         """
-        width: how wide of a band of wavelengths should be considered. this many right and left neighbors will be considered
+        :width: how wide of a band of wavelengths should be considered. this many right and left neighbors will be considered
+
+        :Returns: list of :
         """
         if width == 0:
             return self.entropies
@@ -297,9 +300,10 @@ class Spectrum:
         regions = [self.meanEntropy for i in range(len(self.data))]
         while right <= len(self.entropies):
             region = self.entropies[left:right]
-            
+
+            #can optimize this calculation by using the formula for mean, subtracting regions[left]/n and adding regions[right]/n.
             regions[center] = np.mean(region)
-    
+            #slide window up one:
             center += 1
             left += 1
             right += 1
@@ -311,9 +315,9 @@ class Spectrum:
         """
         A simple hill climbing algorithm to find all peaks in a set of points by traversing left to right through all points.
 
-        points: an np array or list of the indices of the points in the spectrum to be evaluated
+        :points: an np array or list of the indices of the points in the spectrum to be evaluated
 
-        returns: np array of estimated peak indices
+        :returns: np array of estimated peak indices
         """
         spectrum = self.data[1]
         peaks = []
@@ -336,9 +340,9 @@ class Spectrum:
         """
         A simple algorithm to find the lowest point within a neighborhood window.
 
-        point: index of starting point to explore from
+        :point: index of starting point to explore from
 
-        returns: index or indices of lowest point found during exploration
+        :returns: index or indices of lowest point found during exploration
         """
         
         #handle edge cases:
@@ -371,6 +375,7 @@ class Spectrum:
 
     def show(self, showPeaks = True, showEntropy = True):
         """
+        TODO: implement this in a meaningful way
         What is the point of this? what should it show? 
         """
         plt.subplots(2,1)
@@ -414,9 +419,12 @@ class Spectrum:
         averageError = (totalError / (len(estimated) * len(self.data)))
         return (1-averageError, np.sum(peaks_found)/len(true))
 
-    def bootstrap(self, estimated, real, n, sample_size = 100):
+    def bootstrap(self, estimated:np.array, real:np.array, n:int, sample_size:int = 100) -> float:
         """
-        To do-----
+        :estimated: estimated peak sert:
+        :real: true peak set:
+        :n:size of original dataset. this sets an upper bound to how wrong a guess can be:
+        :sample_size: Number of times to perform random bootstrap:
         """
         scores = []
         for i in range(sample_size): 
@@ -502,7 +510,7 @@ To Do:
 [X] Assess needs to raise a red flag if a true peak is missed
 [X] look for duplicated calculations
     [X] distance matrix?
-[] look into a simple way to get outliers
+[X] look into a simple way to get outliers
 
 [] make the .show() method cleaner, and use code from below
 [X] Time each segment of the algorithm with data of varying lengths
@@ -514,8 +522,8 @@ To Do:
 [X] Learn about Virtual Environments in python
 [X] set up virtual environment for this project
 [] implement version of peakfinder that calculates kde for segments of the curve
-[] implement version of peakfinder that calculated 2d kde for curve
-[] implement rectification approximator with lines
+[X] implement version of peakfinder that calculated 2d kde for curve
+[X] implement rectification approximator with lines
 [X] implement non-rectified data generation
 [] test algorithm on non-rectified data
 """
