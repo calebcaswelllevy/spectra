@@ -4,7 +4,7 @@ import numpy as np, matplotlib.pyplot as plt, pandas as pd
 from functionTimer import measure_time
 
 @measure_time
-def generate( n:int=1000, nPeaks:int = 10, noise:float = 7, peakwidthsVariability:float = 1, peakHeightVariability:float = 20, peak_set:list = [], rectified = True) -> list:
+def generate( n:int=1000, nPeaks:int = 10, noise:float = 7, peakwidthsVariability:float = 1, peakHeightVariability:float = 20, peak_set:list = [], rectified = True, plot = False) -> list:
     """
     Generates an artificial spectrum. Random noise is modeled as a normal distribution centered on zero with a SD controlled by the noise parameter. The peaks are randomly generated and modeled by parabolas. Their height and width are random drawn from a uniform distribution, and are modifiable using the peakWidthsvariability and peakheightvariability parameters.
 
@@ -13,6 +13,7 @@ def generate( n:int=1000, nPeaks:int = 10, noise:float = 7, peakwidthsVariabilit
     noise: the sigma squared parameter of the normal distribution that models the noise of the spectrum. bigger means noisier.
     peakwidthsVariability: how much random variation in the width of the peaks?
     peakHeightVariability: how much random variation in the height of the peaks?
+    :plot: boolean value, whether or not to plot the generated data:
 
     Returns: a list with two elements. 1) the spectrum as a pandas DataFrame, and 2) the indices of the centers of the simulated peaks. 
     """
@@ -29,12 +30,16 @@ def generate( n:int=1000, nPeaks:int = 10, noise:float = 7, peakwidthsVariabilit
     data = np.array([number if number<=0 else -number for number in np.random.normal(loc = 0, scale = noise, size =n)])
     if not rectified: # start with hump shaped data with noise:
         hump = derectify(spectrum = np.linspace(-10, 10, num = n), stretch_y = 3*n)
-        plt.subplots(3,1)
-        plt.subplot(311)
-        plt.plot(hump)
+        if plot:
+            if not rectified:
+                plt.subplots(3,1)
+                plt.subplot(311)
+            plt.plot(hump)
         data = np.array([intensity - error if error > 0 else intensity + error for intensity, error in zip(hump, data)])
-        plt.subplot(312)
-        plt.plot(data)
+        if plot:
+            if not rectified:
+                plt.subplot(312)
+            plt.plot(data)
 
         #Make the peaks and add them to the data:
     for center, width, height in zip(peak_set, peakwidths, peakHeights):
@@ -43,11 +48,11 @@ def generate( n:int=1000, nPeaks:int = 10, noise:float = 7, peakwidthsVariabilit
             data[index2] -= peak[index1]
 
     data = pd.DataFrame(zip([i for i in range(len(data))], data))
-
-    plt.subplot(313)
-    plt.plot(data[1])
-    [plt.axvline(peak, c='red', alpha = 0.6) for peak in peak_set]
-   # plt.show()
+    if plot:
+        plt.subplot(313)
+        plt.plot(data[1])
+        [plt.axvline(peak, c='red', alpha = 0.6) for peak in peak_set]
+        plt.show()
     # if rectified:
     #     data = pd.DataFrame(zip([i for i in range(len(data))], data))
     #

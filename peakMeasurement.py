@@ -1,6 +1,10 @@
+import matplotlib.pyplot as plt
+
 from generateData import generate
 from sklearn.linear_model import LinearRegression
 import numpy as np
+import seaborn as sns
+
 def measure_peak_height_by_ratio(spectrum:np.array, peak_index:int, stop_ratio:float) -> float:
     '''
     :spectrum: array of spectrum values:
@@ -60,7 +64,7 @@ def measure_peak_height_by_ratio(spectrum:np.array, peak_index:int, stop_ratio:f
 
     return height
 
-def measure_peak_height_by_rate_of_change(spectrum:np.array, peak_index:int, critical_slope:float, length) -> float:
+def measure_peak_height_by_rate_of_change(spectrum:np.array, peak_index:int, critical_slope:float, length, plot:bool = False) -> float:
     '''
 
     This works! but, will need to find a good way to calibrate the length and critical slope params
@@ -79,6 +83,7 @@ def measure_peak_height_by_rate_of_change(spectrum:np.array, peak_index:int, cri
     1) calctulate rates of change using lm for segment of length «2 * length + 1» going right and left until critical derivative
     2) midpoint between two critical points is the height of the peak.
     '''
+    sns.set_theme()
     def measure_derivative(x_segment, y_segment) -> float:
         '''
         helper function to approximate derivative using a linear model over the interval (index-length, index+length]
@@ -115,27 +120,57 @@ def measure_peak_height_by_rate_of_change(spectrum:np.array, peak_index:int, cri
     rim_indices = [] #hold the indices of the L and R rims of the trough
     for direction in ['left', 'right']:
        rim_indices.append( look(peak_index, direction))
+    if plot:
+        plt.plot(spectrum)
+        [plt.axvline(line, c= 'red') for line in rim_indices if line]
 
-    [print(i) for i in rim_indices]
+
     heights = [spectrum[i] for i in rim_indices if i]
     height = np.mean(heights)
-
+    if plot:
+        plt.axhline(height, c='black')
+   # height -= spectrum[peak_index]
+    #height = - height
+    if plot:
+        plt.show()
     return height
 
 
 
 if __name__ == '__main__':
-    spectrum = [9,9,9,9,9,9,9,9,9,8,7,6,5,4,3,2,1,0,1,2,3,4,5,6,7,8,8,8,8,8,8,8,8]
-    #X = np.arange(0, len(spectrum))
-    #height = measure_peak_height_by_ratio(spectrum, 10, 1.2)
-    print(spectrum[17])
 
-    print('height is: ', measure_peak_height_by_rate_of_change(spectrum=spectrum, peak_index=10, critical_slope=0.2, length = 3))
-    data = generate(rectified=True)
+    # bests = []
+    # for i in range(30):
+    #     data = generate(rectified=True, plot=False)
+    #     slopes = np.arange(0.08, 0.3, 0.08)
+    #     bandwidths = np.arange(2, 10, 1)
+    #     errors = []
+    #     (spectrum, peaks) = data
+    #
+    #     best_combo = ()
+    #     best_score = -np.inf
+    #
+    #     for slope in slopes:
+    #         errors.append([])
+    #         heights = []
+    #
+    #         for bandwidth in bandwidths:
+    #             for peak in peaks:
+    #                 heights.append(measure_peak_height_by_rate_of_change(spectrum[1], peak, slope, bandwidth, plot=False))
+    #             errors[-1].append(np.mean(heights))
+    #
+    #             if np.mean(heights) > best_score:
+    #                 best_combo, best_score = (slope, bandwidth), np.mean(heights)
+    #
+    # print(f'best combo = {best_combo}')
+    # bests.append(best_combo)
+    # print('best combos:', bests)
+    # slopes = [t[0] for t in bests]
+    # bandwidths = [t[1] for t in bests]
+    # print('average bet slope: ', np.mean(slopes))
+    # print('average best bandwidth', np.mean(bandwidths))
+    data = generate(rectified=True, plot=False)
     (spectrum, peaks) = data
     heights = []
     for peak in peaks:
-        heights.append(measure_peak_height_by_rate_of_change(spectrum[1], peak, 0.1, 10))
-
-    for peak, height in zip(peaks, heights):
-        print(f'peak at i {peak} is {height}')
+                 heights.append(measure_peak_height_by_rate_of_change(spectrum[1], peak, 0.08, 5, plot=True))
